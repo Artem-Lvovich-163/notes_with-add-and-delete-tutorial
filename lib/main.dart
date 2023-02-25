@@ -19,16 +19,8 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Flutter Demo',
       theme: ThemeData(
-          // This is the theme of your application.
-          //
-          // Try running your application with "flutter run". You'll see the
-          // application has a blue toolbar. Then, without quitting the app, try
-          // changing the primarySwatch below to Colors.green and then invoke
-          // "hot reload" (press "r" in the console where you ran "flutter run",
-          // or simply save your changes to "hot reload" in a Flutter IDE).
-          // Notice that the counter didn't reset back to zero; the application
-          // is not restarted.
-          primarySwatch: Colors.amber),
+        primarySwatch: Colors.blue,
+      ),
       home: const HomePage(),
     );
   }
@@ -45,11 +37,65 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _nameContriller = TextEditingController();
   final TextEditingController _quanityContriller = TextEditingController();
 
+  List<Map<String, dynamic>> _items = [];
+  final _myBox = Hive.box('myBox');
+
+  //загружаем дату, когда стартуем приложение
+  @override
+  void initState() {
+    super.initState();
+    _refreshItems();
+  }
+
+  void _refreshItems() {
+    final data = _myBox.keys.map((key) {
+      final item = _myBox.get(key);
+      return {'key': key, 'name': item['name'], 'quanity': item['quanity']};
+    }).toList();
+
+    setState(() {
+      _items = data.reversed.toList();
+    });
+  }
+
+  //create new item
+  Future<void> _craeteItem(Map<String, dynamic> newItem) async {
+    await _myBox.add(newItem);
+    _refreshItems();
+  }
+
+  //update item
+  Future<void> _updateItem(int itemKey, Map<String, dynamic> item) async {
+    await _myBox.put(itemKey, item);
+    _refreshItems();
+  }
+
+  //delete item
+  Future<void> _deleteItem(int itemKey) async {
+    await _myBox.delete(itemKey);
+    _refreshItems();
+    //display snack bar
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Удалено'),
+      ),
+    );
+  }
+
+  //craete form
+
   void _showForm(BuildContext context, int? itemKey) async {
+    if (itemKey != null) {
+      final existingItem =
+          _items.firstWhere((element) => element['key'] == itemKey);
+      _nameContriller.text = existingItem['name'];
+      _quanityContriller.text = existingItem['quanity'];
+    }
+
     showModalBottomSheet(
       context: context,
       elevation: 5,
-      isScrollControlled: true,
+      isScrollControlled: false,
       builder: (_) => Container(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -78,12 +124,26 @@ class _HomePageState extends State<HomePage> {
                   ),
                   foregroundColor: MaterialStateProperty.all(Colors.white)),
               onPressed: () async {
+                if (itemKey == null) {
+                  _craeteItem({
+                    'name': _nameContriller.text,
+                    'quanity': _quanityContriller.text,
+                  });
+                }
+
+                if (itemKey != null) {
+                  _updateItem(itemKey, {
+                    'name': _nameContriller.text.trim(),
+                    'quanity': _quanityContriller.text.trim(),
+                  });
+                }
+
                 _nameContriller.text = '';
                 _quanityContriller.text = '';
 
                 Navigator.of(context).pop();
               },
-              child: const Text('Создать'),
+              child: Text(itemKey == null ? 'Создать' : 'Обновить'),
             ),
           ],
         ),
@@ -101,6 +161,40 @@ class _HomePageState extends State<HomePage> {
           'КОНТЕНТ ПЛАН',
           style: TextStyle(color: Colors.white),
         ),
+      ),
+      body: ListView.builder(
+        itemCount: _items.length,
+        itemBuilder: (_, index) {
+          final currentItem = _items[index];
+          return Card(
+            margin: const EdgeInsets.only(left: 15, top: 15, right: 15),
+            color: const Color.fromARGB(255, 2, 125, 253),
+            elevation: 3,
+            child: ListTile(
+              title: Text(currentItem['name']),
+              subtitle: Text(currentItem['quanity'].toString()),
+              textColor: Colors.white,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  //редактировать
+                  IconButton(
+                    onPressed: () => _showForm(context, currentItem['key']),
+                    icon: Icon(
+                      Icons.edit,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                  //удалить
+                  IconButton(
+                    onPressed: () => _deleteItem(currentItem['key']),
+                    icon: Icon(Icons.delete, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color.fromARGB(255, 4, 43, 89),
